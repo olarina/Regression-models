@@ -1,0 +1,126 @@
+---
+title: "Manual transmission seems to be better for MPG"
+output:
+  html_document:
+    df_print: paged
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Synopsis
+
+This is a course project for Coursera's course "Regression models". In this project
+I will look at the set of cars and explore the relationship between a set of variables
+and miles per gallon (MPG). The questions of interest for this project is:
+
+1. Is an automatic or manual transmission better for MPG?
+2. What is the MPG difference between automatic and manual transmissions?
+
+According to the data, cars with manual transmission gives plus 2.9 miles per
+gallon in comaprison with cars with automatic transmission if we hold other parameters
+constant. However, the data set is pretty small and if we remove outliners, the
+advantage becomes much less and not statistically important. So, to make more
+convincing inferences it is necessary to explore larger data sets.
+
+## Exploratory data analyses and model fitting
+
+Our data is:
+```{r}
+library(datasets); data("mtcars")
+head(mtcars,2)
+```
+The outcome we are interested in is mpg and the predictor is am (0 = automatic, 1 = manual). I want to store am as a factor variable.
+```{r}
+mtcars$am = factor(mtcars$am)
+```
+Now, let's make a boxplot to see if where is a difference between automatic and
+manual tranmission - it's in the appendix (Plot 1). Manual transmission seems to be much
+better! What does a simple model tell us?
+```{r}
+fitAm = lm(mpg ~ am, data = mtcars)
+summary(fitAm)$coef
+```
+It's very-very impressive: manual transmission gives plus 7.2 miles. But we have
+to consider other variables, of course. Let's look just on the am coefficient in this case.
+```{r}
+fitAll = lm(mpg ~ ., data = mtcars)
+summary(fitAll)$coef["am1",]
+```
+The same sign of the coefficient, but not so impressive and p-value is very large,
+23%, so the coefficient is not statistically significant.
+
+Let's find the perfect fit. We don't need so much variables in the model. So, I will try to find a variable which is highly correlated with the others, fit a model without this variable and compare the model fitAll with this new model to see if it's okey to get rid of the variable. 
+
+```{r echo = F, results="hide"}
+library(car)
+```
+```{r}
+round(vif(fitAll),2)
+```
+So, for the disp, the variance inflation factor is the biggest. Let's try without disp.
+```{r}
+fitD = lm(mpg ~ . - disp, data = mtcars)
+anova(fitAm, fitD, fitAll)
+```
+The residual variation is much less for fitD than for fitAm, F-statistic is large, i.e. significant. So, the fitD is much better than fitAm. But if we compare fitD, fitAll -
+there is no difference, F-statistic is small, we can get rid of disp - and our model
+wouldn't be worse.
+
+I repeat this step several times, with different variables. I remove cyl, hp, gear,
+vs, drat, carb and leave only am, wt, qsec - they can be significant. Let's check it.
+
+```{r}
+fitAmWt = lm(mpg ~ am + wt, data = mtcars)
+fitAmWtQ = lm(mpg ~ am + wt + qsec, data = mtcars)
+anova(fitAm, fitAmWt, fitAmWtQ, fitAll)
+```
+So, am, wt, qsec are all necessary and I choose fitAmWtQ as my model.
+```{r}
+round(summary(fitAmWtQ)$coef,3)
+```
+Am coefficient is 2.9 and it's significant. This mean that manual transmition gives
+2.9 miles more per gallon holding wt and qsec constant.
+
+## Outliners
+First of all, look at the residul plot in the annendix. And points with largest Cook's distance:
+```{r}
+cd = round(cooks.distance(fitAmWtQ),2)
+cd[order(cd, decreasing =T)[1:4]]
+```
+So, my outliners is: Merc 230, Chrysler Imperial, Fiat 128, Toyota Corolla. Others is less than 0.1.
+```{r}
+outliners = c("Merc 230", "Chrysler Imperial", "Fiat 128", "Toyota Corolla")
+mtcars[(row.names(mtcars) %in% outliners),]
+```
+Chrysler Imperial, Fiat 128, Toyota Corolla have extreme mpgs and makes my model much stronger. Let's try without them.
+```{r}
+outliners = c("Chrysler Imperial", "Fiat 128", "Toyota Corolla")
+mtcarsOut = mtcars[!(row.names(mtcars) %in% outliners),]
+fitOut = lm(mpg ~ am + wt + qsec, data = mtcarsOut)
+round(summary(fitOut)$coef,4)["am1",]
+```
+Coefficient is just 1 now and it's not significant.
+
+## Results
+According to the data, cars with manual transmission gives plus 2.9 miles per
+gallon in comaprison with cars with automatic transmission if we hold other parameters
+constant. But this result highly dependent on just 3 outliners. Without them we can't
+claim that there is any connection between mpg and transmission. So, for more reliable results the have to collect more data.
+
+## Appendix
+```{r}
+```
+```{r}
+library(ggplot2)
+g = ggplot(data = mtcars, aes(x = am, y = mpg, color = am)) + geom_boxplot()
+g  + labs(title = "Plot 1")
+```
+```{r}
+par(mfrow = c(2,2))
+plot(fitAmWtQ)
+```
+
+
